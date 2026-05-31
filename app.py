@@ -1,11 +1,11 @@
+import sys
+sys.dont_write_bytecode = True
 from flask import Flask,request,redirect,url_for,jsonify
 from flask_bcrypt import Bcrypt
 import re
 from otp import genotp
 from utils.cmail import send_mail
 from utils.stoken import endata,dndata
-import sys
-sys.dont_write_bytecode = True
 
 app=Flask(__name__)
 bcrypt=Bcrypt(app)
