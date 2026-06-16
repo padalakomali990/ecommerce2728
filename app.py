@@ -194,7 +194,7 @@ def admindashboard():
         print('dashboard Error:', str(e))
         return jsonify({'status':'failed','message':str(e)}),500
 def allowed_file(filename:str)->bool:
-    return ("." in filename and filename.rsplit('.',1)[1].lower() in ALLOWED_EXTENSIONS)
+    return ("." in filename and filename.rsplit('.',1)[1].lower() in ALLOWED_EXTENSIONS) # type: ignore
 
 @app.route('/api/admin/add-item',methods=['POST'])
 def additem():
