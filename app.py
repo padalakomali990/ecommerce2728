@@ -1063,8 +1063,239 @@ def index():
     finally:
         if cursor:
             cursor.close()
+            
+@app.route('/api/search',methods=['GET'])
+def usersearch():
+    cursor=None
+    try:
+        searchdata=request.args.get('q','').strip()
+        if not searchdata:
+            return jsonify({'status':'failed','message':'Search Query required'}),400
+        pattern=re.compile(r'^[A-Za-z0-9]+$',re.IGNORECASE)
+        if not pattern.match(searchdata):
+            return jsonify({'status':'failed','message':'invaild search'}),400
+        mydb.ping(reconnect=True)
+        cursor=mydb.cursor(buffered=True)
+        # cursor.execute('''select bin_to_uuid(itemid),item_name,item_desc,item_about,price,quantity,category,item_filename from items where item_name like %s or item_desc like %s or price like %s or category like %s''',['%'+searchdata+'%','%'+searchdata+'%','%'+searchdata+'%','%'+searchdata+'%'])
+        
+        cursor.execute('''
+        select 
+        bin_to_uuid(itemid),
+        item_name,
+        item_description,
+        item_about,
+        price,
+        quantity,
+        category,
+        item_filename
 
+        from items
 
+        where item_name like %s
+        or item_description like %s
+        or CAST(price AS CHAR) like %s
+        or category like %s
+        ''',
+        [
+        '%'+searchdata+'%',
+        '%'+searchdata+'%',
+        '%'+searchdata+'%',
+        '%'+searchdata+'%'
+        ])
+        
+        allitem_data=cursor.fetchall()
+        items=[]
+        for item in allitem_data:
+            image_url = url_for('static', filename=f'uploads/{item[7]}', _external=True)
+            items.append({
+                'itemid': item[0],
+                'itemname': item[1],
+                'description': item[2],
+                'about': item[3],
+                'price': float(item[4]),
+                'quantity': int(item[5]),
+                'category': item[6],
+                'image_url': image_url
+            })
+        return jsonify({'status':'success','total_items':len(items),'items':items}),200
+    except Exception as e:
+        print(f'Search error',str(e))
+        return jsonify({'status':'failed','message':str(e)}),500
+    finally:
+        if cursor:
+            cursor.close()
+            
+# @app.route('/api/orders/<ordid>',methods=['GET'])
+# @app.route('/api/orders/<int:ordid>',methods=['GET'])
+# def myorder_details(ordid):
+    cursor=None
+    try:
+        if 'userid' not in session:
+            return jsonify({'status':'failed','message':'pls login first'}),401
+        mydb.ping(reconnect=True)
+        cursor=mydb.cursor(buffered=True)
+        userid=session.get('userid')
+        #fetch all orders
+        cursor.execute('select orderid,razorpay_ordid,razorpay_payment,total_amount,delivery,tax,grand_total,created_at from orders where userid=uuid_to_bin(%s) and orderid=%s',[userid,ordid])
+        order_data=cursor.fetchone()
+        if not order_data:
+            return jsonify({'status':'failed','message':'Order not found'}),404
+        cursor.execute('select order_detailsid,orderid,bin_to_uuid(itemid),item_name,item_price,item_quantity,subtotal,item_category,item_filename from order_items where orderid=%s',[ordid])
+        orders_itemsdata=cursor.fetchall()
+        #------------------------Format order details
+        order_json={
+            'orderid':order_data[0],
+            'razorpay_order_id':order_data[1],
+            'razorpay_payment_id':order_data[2],
+            'total_amount':float(order_data[3]),
+            'delivery':float(order_data[4]),
+            'tax':float(order_data[5]),
+            'grand_total':float(order_data[6]),
+            'created_at':str(order_data[7])
+        }
+        #-----------------------Format order items
+        items_json=[]
+        for item in orders_itemsdata:
+            image_url=url_for('static',filename=f'uploads/{item[8]}',_external=True)
+            items_json.append({
+                'order_details_id': item[0],
+                'order_id':item[1],
+                'itemid':item[2],
+                'item_name':item[3],
+                'item_price':float(item[4]),
+                'item_quantity':int(item[5]),
+                'subtotal':float(item[6]),
+                'item_category':item[7],
+                'item_image':image_url
+            })
+        return jsonify({
+            'status':'success','order':order_json,'items':items_json
+        }),200
+    except Exception as e:
+        print(f'order details error:',str(e))
+        return jsonify({
+            'status':'failed','message':str(e)}),500
+    finally:
+        if cursor:
+            cursor.close()            
+        
+@app.route('/api/orders/<int:ordid>', methods=['GET'])
+def myorder_details(ordid):
+
+    cursor = None
+
+    try:
+
+        # Check login
+        if 'userid' not in session:
+            return jsonify({
+                'status': 'failed',
+                'message': 'pls login first'
+            }), 401
+
+        mydb.ping(reconnect=True)
+
+        cursor = mydb.cursor(buffered=True)
+
+        userid = session.get('userid')
+
+        # Fetch order
+        cursor.execute('''
+            SELECT 
+                orderid,
+                razorpay_ordid,
+                razorpay_payment,
+                total_amount,
+                delivery,
+                tax,
+                grand_total,
+                created_at
+            FROM orders
+            WHERE userid = uuid_to_bin(%s)
+            AND orderid = %s
+        ''', [userid, ordid])
+
+        order_data = cursor.fetchone()
+
+        if not order_data:
+            return jsonify({
+                'status': 'failed',
+                'message': 'Order not found'
+            }), 404
+
+        # Fetch ordered items
+        cursor.execute('''
+            SELECT
+                order_detailsid,
+                orderid,
+                bin_to_uuid(itemid),
+                item_name,
+                item_price,
+                item_quantity,
+                subtotal,
+                item_category,
+                item_filename
+            FROM order_items
+            WHERE orderid = %s
+        ''', [ordid])
+
+        orders_itemsdata = cursor.fetchall()
+
+        # Format order
+        order_json = {
+            'orderid': order_data[0],
+            'razorpay_order_id': order_data[1],
+            'razorpay_payment_id': order_data[2],
+            'total_amount': float(order_data[3]),
+            'delivery': float(order_data[4]),
+            'tax': float(order_data[5]),
+            'grand_total': float(order_data[6]),
+            'created_at': str(order_data[7])
+        }
+
+        # Format items
+        items_json = []
+
+        for item in orders_itemsdata:
+
+            image_url = url_for(
+                'static',
+                filename=f'uploads/{item[8]}',
+                _external=True
+            )
+
+            items_json.append({
+                'order_details_id': item[0],
+                'order_id': item[1],
+                'itemid': item[2],
+                'item_name': item[3],
+                'item_price': float(item[4]),
+                'item_quantity': int(item[5]),
+                'subtotal': float(item[6]),
+                'item_category': item[7],
+                'item_image': image_url
+            })
+
+        # RETURN OUTSIDE LOOP
+        return jsonify({
+            'status': 'success',
+            'order': order_json,
+            'items': items_json
+        }), 200
+
+    except Exception as e:
+
+        print("order details error:", str(e))
+
+        return jsonify({
+            'status': 'failed',
+            'message': str(e)
+        }), 500
+
+    finally:
+
+        if cursor:
+            cursor.close()
 
 
 
