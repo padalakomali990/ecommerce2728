@@ -1,7 +1,7 @@
 import sys
 import uuid
 sys.dont_write_bytecode = True
-from flask import Flask,request,redirect,url_for,jsonify,session
+from flask import Flask, make_response,request,redirect,url_for,jsonify,session
 from flask_cors import CORS
 #from flask_session import Session #security layer
 from flask_bcrypt import Bcrypt
@@ -11,6 +11,18 @@ from utils.cmail import send_mail
 from utils.stoken import endata,dndata
 from mysql.connector import (connection)
 from datetime import timedelta
+from io import BytesIO
+from reportlab.platypus import(
+    SimpleDocTemplate,
+    Table,
+    TableStyle,
+    Paragraph,
+    Spacer
+)
+from reportlab.lib import colors
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.pagesizes import A4
+from reportlab.platypus.flowables import HRFlowable
 import uuid
 import razorpay
 client = razorpay.Client(auth=("rzp_test_SzppdEzy51SPYd", "ZXV3p1lSRtZFXpt9wXac4kI8"))
@@ -1036,6 +1048,7 @@ def myorders():
     finally:
         if cursor:
             cursor.close()
+            
 @app.route('/api/products',methods=['GET'])
 def index():
     cursor=None
@@ -1064,121 +1077,92 @@ def index():
         if cursor:
             cursor.close()
             
-@app.route('/api/search',methods=['GET'])
+@app.route('/api/search', methods=['GET'])
 def usersearch():
-    cursor=None
+    cursor = None
     try:
-        searchdata=request.args.get('q','').strip()
+        searchdata = request.args.get('q', '').strip()
+
         if not searchdata:
-            return jsonify({'status':'failed','message':'Search Query required'}),400
-        pattern=re.compile(r'^[A-Za-z0-9]+$',re.IGNORECASE)
+            return jsonify({
+                'status': 'failed',
+                'message': 'Search Query required'
+            }), 400
+
+        pattern = re.compile(r'^[A-Za-z0-9 ]+$', re.IGNORECASE)
+
         if not pattern.match(searchdata):
-            return jsonify({'status':'failed','message':'invaild search'}),400
+            return jsonify({
+                'status': 'failed',
+                'message': 'invalid search'
+            }), 400
+
         mydb.ping(reconnect=True)
-        cursor=mydb.cursor(buffered=True)
-        # cursor.execute('''select bin_to_uuid(itemid),item_name,item_desc,item_about,price,quantity,category,item_filename from items where item_name like %s or item_desc like %s or price like %s or category like %s''',['%'+searchdata+'%','%'+searchdata+'%','%'+searchdata+'%','%'+searchdata+'%'])
-        
+        cursor = mydb.cursor(buffered=True)
+
         cursor.execute('''
-        select 
-        bin_to_uuid(itemid),
-        item_name,
-        item_description,
-        item_about,
-        price,
-        quantity,
-        category,
-        item_filename
-
-        from items
-
-        where item_name like %s
-        or item_description like %s
-        or CAST(price AS CHAR) like %s
-        or category like %s
+            SELECT
+                bin_to_uuid(itemid),
+                item_name,
+                item_description,
+                item_about,
+                price,
+                quantity,
+                category,
+                item_filename
+            FROM items
+            WHERE item_name LIKE %s
+               OR item_description LIKE %s
+               OR CAST(price AS CHAR) LIKE %s
+               OR category LIKE %s
         ''',
         [
-        '%'+searchdata+'%',
-        '%'+searchdata+'%',
-        '%'+searchdata+'%',
-        '%'+searchdata+'%'
+            '%' + searchdata + '%',
+            '%' + searchdata + '%',
+            '%' + searchdata + '%',
+            '%' + searchdata + '%'
         ])
-        
-        allitem_data=cursor.fetchall()
-        items=[]
+
+        allitem_data = cursor.fetchall()
+
+        items = []
+
         for item in allitem_data:
-            image_url = url_for('static', filename=f'uploads/{item[7]}', _external=True)
+
+            image_url = url_for(
+                'static',
+                filename=f'uploads/{item[7]}',
+                _external=True
+            )
+
             items.append({
                 'itemid': item[0],
                 'itemname': item[1],
-                'description': item[2],
-                'about': item[3],
+                'item_desc': item[2],       # same as products api
+                'item_about': item[3],     # same as products api
                 'price': float(item[4]),
                 'quantity': int(item[5]),
                 'category': item[6],
-                'image_url': image_url
+                'image': image_url          # same as products api
             })
-        return jsonify({'status':'success','total_items':len(items),'items':items}),200
+
+        return jsonify({
+            'status': 'success',
+            'total_items': len(items),
+            'items': items
+        }), 200
+
     except Exception as e:
-        print(f'Search error',str(e))
-        return jsonify({'status':'failed','message':str(e)}),500
+        print("Search error:", str(e))
+        return jsonify({
+            'status': 'failed',
+            'message': str(e)
+        }), 500
+
     finally:
         if cursor:
             cursor.close()
-            
-# @app.route('/api/orders/<ordid>',methods=['GET'])
-# @app.route('/api/orders/<int:ordid>',methods=['GET'])
-# def myorder_details(ordid):
-    cursor=None
-    try:
-        if 'userid' not in session:
-            return jsonify({'status':'failed','message':'pls login first'}),401
-        mydb.ping(reconnect=True)
-        cursor=mydb.cursor(buffered=True)
-        userid=session.get('userid')
-        #fetch all orders
-        cursor.execute('select orderid,razorpay_ordid,razorpay_payment,total_amount,delivery,tax,grand_total,created_at from orders where userid=uuid_to_bin(%s) and orderid=%s',[userid,ordid])
-        order_data=cursor.fetchone()
-        if not order_data:
-            return jsonify({'status':'failed','message':'Order not found'}),404
-        cursor.execute('select order_detailsid,orderid,bin_to_uuid(itemid),item_name,item_price,item_quantity,subtotal,item_category,item_filename from order_items where orderid=%s',[ordid])
-        orders_itemsdata=cursor.fetchall()
-        #------------------------Format order details
-        order_json={
-            'orderid':order_data[0],
-            'razorpay_order_id':order_data[1],
-            'razorpay_payment_id':order_data[2],
-            'total_amount':float(order_data[3]),
-            'delivery':float(order_data[4]),
-            'tax':float(order_data[5]),
-            'grand_total':float(order_data[6]),
-            'created_at':str(order_data[7])
-        }
-        #-----------------------Format order items
-        items_json=[]
-        for item in orders_itemsdata:
-            image_url=url_for('static',filename=f'uploads/{item[8]}',_external=True)
-            items_json.append({
-                'order_details_id': item[0],
-                'order_id':item[1],
-                'itemid':item[2],
-                'item_name':item[3],
-                'item_price':float(item[4]),
-                'item_quantity':int(item[5]),
-                'subtotal':float(item[6]),
-                'item_category':item[7],
-                'item_image':image_url
-            })
-        return jsonify({
-            'status':'success','order':order_json,'items':items_json
-        }),200
-    except Exception as e:
-        print(f'order details error:',str(e))
-        return jsonify({
-            'status':'failed','message':str(e)}),500
-    finally:
-        if cursor:
-            cursor.close()            
-        
+                 
 @app.route('/api/orders/<int:ordid>', methods=['GET'])
 def myorder_details(ordid):
 
@@ -1296,6 +1280,98 @@ def myorder_details(ordid):
 
         if cursor:
             cursor.close()
+@app.route('/api/invoice/<int:ord_id>',methods=['GET'])
+def get_invoice(ord_id):
+    cursor=None
+    try:
+        if 'userid' not in session:
+            return jsonify({'status':'failed','message':'pls login first'}),401
+        mydb.ping(reconnect=True)
+        cursor=mydb.cursor(buffered=True)
+        userid=session.get('userid')
+        #fetch all orders
+        cursor.execute('select orderid,razorpay_ordid,razorpay_payment,total_amount,delivery,tax,grand_total,created_at from orders where userid=uuid_to_bin(%s)  and orderid=%s',[userid,ord_id])
+        order_data=cursor.fetchone()
+        if not order_data:
+            return jsonify({'status':'failed','message':'Order not found'}),404
+        print(order_data)
+        cursor.execute('select item_name,item_price,item_quantity,subtotal,item_category,item_filename from order_items where orderid=%s',[ord_id])
+        orders_itemsdata=cursor.fetchall()
+        print(orders_itemsdata)
+        #-----------------------create pdf buffer-------------
+        pdf_buffer=BytesIO() # type: ignore
+        #-----------------Create Document-------------
+        doc=SimpleDocTemplate(pdf_buffer,pagesize=A4,rightMargin=30,leftMargin=30,topMargin=30,bottomMargin=20)
+        styles=getSampleStyleSheet()
+        elements=[]
+        #------------Title-----------
+        title=Paragraph("<b>BUYROUTE INVOICE</b>",styles["Title"])
+        elements.append(title)
+        elements.append(Spacer(1,15))
+        #--------------------Order Details
+        order_info=f"""<b>ORDER ID : </b>{order_data[0]}<br/>
+                        <b>RAZORPAY ORDER ID: </b>{order_data[1]}<br/>
+                        <b>PAYMENT ID : </b>{order_data[2]}<br/>
+                        <b>ORDER DATE : </b>{order_data[7]}<br/>"""
+        order_para=Paragraph(order_info,styles['BodyText'])
+        elements.append(order_para)
+        elements.append(Spacer(1,10))
+        elements.append(HRFlowable(width="100%"))
+        elements.append(Spacer(1,15))
+        #------------------Table Data---------items
+        table_data=[['Item Name','Category','Price','Quantity','Subtotal']]
+        for item in orders_itemsdata:
+            table_data.append([item[0],item[4],f'₹{float(item[1])}',str(item[2]),f"₹{float(item[3])}"])
+        #------ Create Table -----------------
+        table=Table(table_data,colWidths=[180,100,80,70,80])
+        #-----------------Table Styles
+        table.setStyle(
+            TableStyle([
+                ('BACKGROUND',(0,0),(-1,0),colors.HexColor('#0d6efd')),
+                ('TEXTCOLOR',(0,0),(-1,0),colors.white),
+                ('FONTNAME',(0,0),(-1,0),'Helvetica-Bold'),
+                ('FONTSIZE',(0,0),(-1,-1),10),
+                ('BOTTOMPADDING',(0,0),(-1,0),10),
+                ('GRID',(0,0),(-1,-1),1,colors.black),
+                ('BACKGROUND',(0,1),(-1,-1),colors.beige),
+                ('ALIGN',(2,1),(-1,-1),'CENTER'),
+            ])
+        )
+        elements.append(table)
+        elements.append(Spacer(1,20))
+        #--------------------SUMMARY------------
+        summary=f"""
+        <b>ITEMS Total : </b>₹{float(order_data[3])}<br/><br/>
+        <b>Delivery: </b>₹{float(order_data[4])}<br/><br/>
+        <b>Tax: </b>₹{float(order_data[5])}<br/><br/>
+        <b>Grand Total: </b>₹{float(order_data[6])}"""
+        summary_para=Paragraph(summary,styles['Heading3'])
+        elements.append(summary_para)
+        elements.append(Spacer(1,25))
+        #------------------Footer------------
+        footer=Paragraph('Thank you for shopping with BUYROUTE',
+        styles['Italic'])
+        elements.append(footer)
+        #---------------Build PDF
+        doc.build(elements)
+        pdf_buffer.seek(0)
+        #--------------RESPONSE------------
+        response=make_response(pdf_buffer.getvalue())
+        response.headers['Content-Type']='application.pdf'
+        response.headers['Content-Disposition']=(
+            f'attachment; filename=invoice_{ord_id}.pdf'
+        )
+        return response
+    except Exception as e:
+        print(f'Invoice Error:',e)
+        return jsonify({'status':'failed','message':str(e)}),500
+    else:
+        if cursor:
+            cursor.close()
+
+
+
+
 
 
 
