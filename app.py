@@ -34,24 +34,24 @@ mydb=connection.MySQLConnection(user='root',host='localhost',password='Komali@12
 
 app = Flask(__name__)
 
+UPLOAD_FOLDER = "static/uploads"
+
+app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
+os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
+
 app.secret_key = "Code123"
+
+app.config["SESSION_COOKIE_SECURE"] = False
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = None
 
 app.permanent_session_lifetime = timedelta(days=1)
 
-# CORS for React frontend
 CORS(
     app,
     supports_credentials=True,
-    origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173"
-    ]
+    origins=["http://localhost:5173"]
 )
-
-# Session config
-app.config["SESSION_COOKIE_SECURE"] = False   # IMPORTANT (localhost uses HTTP)
-app.config["SESSION_COOKIE_HTTPONLY"] = True
-app.config["SESSION_COOKIE_SAMESITE"] = None
 
 bcrypt=Bcrypt(app)
 @app.route('/api/admin/register',methods=['POST'])
@@ -167,12 +167,10 @@ def adminlogin():
             return jsonify({'status':'failed','message':'Invalid password'}),401
 
         session.clear()
-
         session.permanent = True
         session['adminid'] = adminid
         session['adminemail'] = adminemail
-
-        print("LOGIN SESSION =", session)
+        print("LOGIN SESSION =", dict(session))
         print("LOGIN COOKIES =", request.cookies)
 
         response = jsonify({
@@ -195,6 +193,7 @@ def adminlogin():
     finally:
         if cursor:
             cursor.close()
+            
 @app.route('/api/admin/dashboard',methods=['GET'])
 def admindashboard():
     try:
@@ -265,38 +264,85 @@ def additem():
         if cursor:
             cursor.close()
             
-@app.route('/api/admin/items',methods=['GET'])
+@app.route('/api/admin/items', methods=['GET'])
 def viewallitems():
-    cursor=None
+    # DEBUG
+    print("ITEMS SESSION =", dict(session))
+    print("ADMIN ID =", session.get("adminid"))
+    cursor = None
     try:
+        # login check
         if 'adminid' not in session:
-            return jsonify({'status':'failed','message':'pls login first'}),401
-        adminid=session.get('adminid')
+            return jsonify({
+                'status': 'failed',
+                'message': 'pls login first'
+            }), 401
+
+        adminid = session.get('adminid')
+
         mydb.ping(reconnect=True)
-        cursor=mydb.cursor(buffered=True)
-        cursor.execute('''select bin_to_uuid(itemid),item_name,item_description,item_about,price,quantity,category,item_filename,created_at from items where added_by=uuid_to_bin(%s)''',[adminid])
-        allitems_data=cursor.fetchall()
-        products=[]
+        cursor = mydb.cursor(buffered=True)
+
+        cursor.execute('''
+            select 
+                bin_to_uuid(itemid),
+                item_name,
+                item_description,
+                item_about,
+                price,
+                quantity,
+                category,
+                item_filename,
+                created_at
+            from items
+            where added_by = uuid_to_bin(%s)
+        ''', [adminid])
+
+        allitems_data = cursor.fetchall()
+
+        products = []
+
         for item in allitems_data:
-            products.append({'itemid':item[0],
-                              'itemname':item[1],
-                              'item_desc':item[2],
-                              'item_about':item[3],
-                              'price':float(item[4]),
-                              'quantity':item[5],
-                              'category':item[6],
-                              'image':url_for('static',filename=f'uploads/{item[7]}',_external=True)})
-        return jsonify({'status':'success','products':products}),200
+            products.append({
+                'itemid': item[0],
+                'itemname': item[1],
+                'item_desc': item[2],
+                'item_about': item[3],
+                'price': float(item[4]),
+                'quantity': item[5],
+                'category': item[6],
+                'image': url_for(
+                    'static',
+                    filename=f'uploads/{item[7]}',
+                    _external=True
+                )
+            })
+
+        return jsonify({
+            'status': 'success',
+            'products': products
+        }), 200
+
     except Exception as e:
-        print("VIEW ITEMS ERROR:",str(e))
-        return jsonify({'status':'failed','message':str(e)}),500
+        print("VIEW ITEMS ERROR:", str(e))
+        return jsonify({
+            'status': 'failed',
+            'message': str(e)
+        }), 500
+
     finally:
         if cursor:
             cursor.close()
+                
 @app.route('/api/admin/item/<itemid>',methods=['GET'])
 def viewitem(itemid):
+        # DEBUG
+    print("ITEMS SESSION =", dict(session))
+    print("ADMIN ID =", session.get("adminid"))
     cursor=None
     try:
+        print("SINGLE ITEM SESSION =", dict(session))
+        print("ADMIN ID =", session.get("adminid"))
         if 'adminid' not in session:
             return jsonify({'status':'failed','message':'pls login first'}),401
         try:
@@ -325,8 +371,12 @@ def viewitem(itemid):
     finally:
         if cursor:
             cursor.close()
+
 @app.route('/api/admin/delete-item/<itemid>',methods=['DELETE'])
 def deleteitem(itemid):
+        # DEBUG
+    print("ITEMS SESSION =", dict(session))
+    print("ADMIN ID =", session.get("adminid"))
     cursor=None
     try:
         if 'adminid' not in session:
@@ -358,89 +408,201 @@ def deleteitem(itemid):
     finally:
         if cursor:
             cursor.close()
-@app.route('/api/admin/update-item/<itemid>',methods=['PUT'])
+
+@app.route('/api/admin/update-item/<itemid>', methods=['PUT'])
 def updateitem(itemid):
-    new_image_path=None
-    old_image_path=None
-    cursor=None
+
+    # DEBUG
+    print("UPDATE SESSION =", dict(session))
+    print("ADMIN ID =", session.get("adminid"))
+
+    new_image_path = None
+    old_image_path = None
+    cursor = None
+
     try:
+        # login check
         if 'adminid' not in session:
-            return jsonify({'status':'failed','message':'pls login First'}),401
-        #validate uuid
+            return jsonify({
+                'status': 'failed',
+                'message': 'pls login First'
+            }), 401
+
+        # validate uuid
         try:
             uuid.UUID(itemid)
         except ValueError:
-            return jsonify({'status':'failed','message':'Invalid itemid'}),400
-        #receive form data
-        updateditem_name=request.form.get('title','').strip()
-        updateditem_description=request.form.get('Description','').strip()
-        updateditem_about=request.form.get('About_item','').strip()
-        updateditem_quantity=request.form.get('quantity','').strip()
-        updateditem_price=request.form.get('price','').strip()
-        updateditem_category=request.form.get('category','').strip()
-        #form validation
+            return jsonify({
+                'status': 'failed',
+                'message': 'Invalid itemid'
+            }), 400
+
+        # receive form data
+        updateditem_name = request.form.get('title', '').strip()
+        updateditem_description = request.form.get('Description', '').strip()
+        updateditem_about = request.form.get('About_item', '').strip()
+        updateditem_quantity = request.form.get('quantity', '').strip()
+        updateditem_price = request.form.get('price', '').strip()
+        updateditem_category = request.form.get('category', '').strip()
+
+        # validation
         if not updateditem_name:
-            return jsonify({'status':'failed','message':'Item name required'}),400
+            return jsonify({
+                'status': 'failed',
+                'message': 'Item name required'
+            }), 400
+
         try:
-            updateditem_price=float(updateditem_price)
-            updateditem_quantity=int(updateditem_quantity)
+            updateditem_price = float(updateditem_price)
+            updateditem_quantity = int(updateditem_quantity)
         except ValueError:
-            return jsonify({'status':'failed','message':'Invalid price or quantity'}),400
+            return jsonify({
+                'status': 'failed',
+                'message': 'Invalid price or quantity'
+            }), 400
+
         mydb.ping(reconnect=True)
-        cursor=mydb.cursor(buffered=True)
-        adminid=session.get('adminid')
-        #fetching Existing item details
-        cursor.execute('''select bin_to_uuid(itemid),item_name,item_description,item_about,price,quantity,category,item_filename,created_at from items where added_by=uuid_to_bin(%s) and itemid=uuid_to_bin(%s)''',[adminid,itemid])
-        item_data=cursor.fetchone()
+        cursor = mydb.cursor(buffered=True)
+
+        adminid = session.get('adminid')
+
+        # fetch old item
+        cursor.execute('''
+            select 
+                bin_to_uuid(itemid),
+                item_name,
+                item_description,
+                item_about,
+                price,
+                quantity,
+                category,
+                item_filename,
+                created_at
+            from items
+            where added_by=uuid_to_bin(%s)
+            and itemid=uuid_to_bin(%s)
+        ''', [adminid, itemid])
+
+        item_data = cursor.fetchone()
+
         if not item_data:
-            return jsonify({'status':'failed','message':'item not found'}),404
-        old_image=item_data[7]
-        filename=old_image
-        updateditem_filedata=request.files.get('file')
-        print(updateditem_filedata) #''
-        #new image upload
+            return jsonify({
+                'status': 'failed',
+                'message': 'item not found'
+            }), 404
+
+        old_image = item_data[7]
+        filename = old_image
+
+        updateditem_filedata = request.files.get('file')
+
+        print("FILE DATA =", updateditem_filedata)
+
+        # new image upload
         if updateditem_filedata:
-            uploaded_filename=updateditem_filedata.filename #new image file name
+
+            uploaded_filename = updateditem_filedata.filename
+
             # extension validation
             if not allowed_file(uploaded_filename):
-                return jsonify({'status':'failed','message':'only png,jpg,jpeg,webp,gif allowed'}),400
-            #mime validation
-            if not updateditem_filedata.mimetype.startswith('image/'):
-                return jsonify({'status':'failed','message':'Invalid image'}),404
-            orig_secure=secure_filename(uploaded_filename)
-            ext=os.path.splitext(orig_secure)[1] #[filename,extension] we are extracting only extension
-            #generating new filename 
-            filename=genotp()+ext
-            #save new image in satic folder
-            new_image_path=os.path.join(app.config['UPLOAD_FOLDER'],filename)
-            updateditem_filedata.save(new_image_path)
-            #old imagepath
-            old_image_path=os.path.join(app.config['UPLOAD_FOLDER'],old_image)
-        #update database
-        cursor.execute('''update items set item_name=%s,item_description=%s,item_about=%s,price=%s,quantity=%s,category=%s,item_filename=%s where itemid=uuid_to_bin(%s) and added_by=uuid_to_bin(%s)''',[updateditem_name,updateditem_description,updateditem_about,updateditem_price,updateditem_quantity,updateditem_category,filename,itemid,adminid])
-        print('updated')
-        mydb.commit()
-        cursor.close()
+                return jsonify({
+                    'status': 'failed',
+                    'message': 'only png,jpg,jpeg,webp,gif allowed'
+                }), 400
 
-        #delete old image After Db success
-        if (updateditem_filedata and old_image_path and os.path.exists(old_image_path)):
+            # mime validation
+            if not updateditem_filedata.mimetype.startswith('image/'):
+                return jsonify({
+                    'status': 'failed',
+                    'message': 'Invalid image'
+                }), 400
+
+            orig_secure = secure_filename(uploaded_filename)
+
+            ext = os.path.splitext(orig_secure)[1]
+
+            filename = genotp() + ext
+
+            # save new image
+            new_image_path = os.path.join(
+                app.config['UPLOAD_FOLDER'],
+                filename
+            )
+
+            updateditem_filedata.save(new_image_path)
+
+            old_image_path = os.path.join(
+                app.config['UPLOAD_FOLDER'],
+                old_image
+            )
+
+        # update db
+        cursor.execute('''
+            update items 
+            set item_name=%s,
+                item_description=%s,
+                item_about=%s,
+                price=%s,
+                quantity=%s,
+                category=%s,
+                item_filename=%s
+            where itemid=uuid_to_bin(%s)
+            and added_by=uuid_to_bin(%s)
+        ''', [
+            updateditem_name,
+            updateditem_description,
+            updateditem_about,
+            updateditem_price,
+            updateditem_quantity,
+            updateditem_category,
+            filename,
+            itemid,
+            adminid
+        ])
+
+        print("UPDATED SUCCESSFULLY")
+
+        mydb.commit()
+
+        # delete old image after success
+        if (
+            updateditem_filedata and
+            old_image_path and
+            os.path.exists(old_image_path)
+        ):
             os.remove(old_image_path)
+
         return jsonify({
-            'status':'success',
-            'message':'Item Updated successfully',
-            'image':url_for('static',filename=f'uploads/{filename}',_external=True)
-        }),200
+            'status': 'success',
+            'message': 'Item Updated successfully',
+            'image': url_for(
+                'static',
+                filename=f'uploads/{filename}',
+                _external=True
+            )
+        }), 200
+
     except Exception as e:
+
         mydb.rollback()
-        print("UPDATE ITEM ERROR:",str(e))
-        #remove newly uploaded image if db fails
-        if(
-            new_image_path and os.path.exists(new_image_path)):
+
+        print("UPDATE ITEM ERROR:", str(e))
+
+        if (
+            new_image_path and
+            os.path.exists(new_image_path)
+        ):
             os.remove(new_image_path)
-        return jsonify({'status':'failed','message':str(e)}),500
+
+        return jsonify({
+            'status': 'failed',
+            'message': str(e)
+        }), 500
+
     finally:
         if cursor:
             cursor.close()
+                    
 @app.route('/api/admin/profile-update',methods=['PUT'])
 def adminprofileupdate():
     new_image_path=None
@@ -1368,24 +1530,291 @@ def get_invoice(ord_id):
     else:
         if cursor:
             cursor.close()
-
-
-
-
-
-
-
-
-
-
-
+            
+@app.route('/api/buy_now',methods=['POST'])
+def buy_now():
+    cursor=None
+    try:
+        #login check
+        if not session.get('userid'):
+            return jsonify({'status':'failed','message':'Pls login first'}),401
+        data=request.get_json()
+        if not data:
+            return jsonify({'status':'failed','message':'No input data'}),400
+        itemid=data.get('itemid')
+        quantity=int(data.get('quantity',1))
+        if not itemid:
+            return jsonify({'status':'failed','message':'Item id required'}),400
+         #quantity validation
+        if quantity<=0:
+            return jsonify({'status':'failed','message':'Quantity must be greater than 0'}),400
+        #reconnect mysql automatically
+        mydb.ping(reconnect=True)
+        cursor=mydb.cursor(buffered=True)
+        userid=session.get('userid')
+        #stock validation
+        cursor.execute('select bin_to_uuid(itemid),item_name,item_description,item_about,price,quantity,category,item_filename from items where itemid=uuid_to_bin(%s)',[itemid])
+        item_data=cursor.fetchone()
+        if not item_data:
+            return jsonify({'status':'failed','message':'Item not found'}),400
+        available_stock=item_data[5]
+        if quantity > available_stock:
+            return jsonify({'status':'failed','message':'Insufficient stock'}),400
+        image_url=url_for('static',filename=f'uploads/{item_data[7]}',_external=True)
+        #-------------Storing single buy item in session temp
+        print(session,'before single buy')
+        session['single_buy']={
+            itemid:[item_data[1],quantity,item_data[4],item_data[5],item_data[6],item_data[7]]
+        }
+        session.modified=True
+        print(session,'After single buy')
+        return jsonify({
+            'status':'success','message':'Single buy item stored successfully',
+            'payment_type':'single',
+            'item':{
+                'itemid':item_data[0],
+                'itemname':item_data[1],
+                'description':item_data[2],
+                'about':item_data[3],
+                'price':float(item_data[4]),
+                'quantity':quantity,
+                'stock':item_data[5],
+                'category':item_data[6],
+                'image':image_url
+            },
+            #frontend will use this
+            'next_url':'/api/payment/create-order'
+        })
+    except Exception as e:
+        print(f'Buy now Error:',str(e))
+        return jsonify({'status':'failed','message':str(e)}),500
+    finally:
+        if cursor:
+            cursor.close()
+            
+@app.route('/api/items/<itemid>', methods=['GET'])
+def descitem(itemid):
+    cursor = None
+    try:
+        try:
+            uuid.UUID(itemid)
+        except ValueError:
+            return jsonify({'status':'failed','message':'invalid item id'}),400
         
+        mydb.ping(reconnect=True)
+        cursor = mydb.cursor(buffered=True)
 
+        cursor.execute("""
+            SELECT
+                bin_to_uuid(itemid),
+                item_name,
+                item_description,
+                item_about,
+                price,
+                quantity,
+                category,
+                item_filename,
+                created_at
+            FROM items
+            WHERE itemid = uuid_to_bin(%s)
+            
+        """, [itemid])
 
+        item_data = cursor.fetchone()
 
+        if not item_data:
+            return jsonify({
+                'status': 'failed',
+                'message': 'Item not found'
+            }), 404
 
+        item_details= {
+            'itemid': item_data[0],
+            'itemname': item_data[1],
+            'item_desc': item_data[2],
+            'item_about': item_data[3],
+            'price': float(item_data[4]),
+            'quantity': int(item_data[5]),
+            'category': item_data[6],
+            'image_url': url_for(
+                'static',
+                filename=f'uploads/{item_data[7]}',
+                _external=True
+            ),
+            'created_at': item_data[8]
+        }
+
+        return jsonify({
+            'status': 'success',
+            'item': item_details
+        }), 200
+
+    except Exception as e:
+        print("VIEW SINGLE ITEM ERROR :", str(e))
+        return jsonify({
+            'status': 'failed',
+            'message': str(e)
+        }), 500
+
+    finally:
+        if cursor:
+            cursor.close()
+            
+@app.route('/api/add-review/<itemid>',methods=['POST'])
+def addreview(itemid):
+    cursor=None
+    try:
+        #login check
+        if not session.get('userid'):
+            return jsonify({'status':'failed','message':'pls login first'}),401
+
+        data=request.get_json()
+        if not data:
+            return jsonify({'status':'failed','message':'No input data'}),400
+        rating=data.get('rating')
+        review_text=data.get('review_text')
+        if not rating or not review_text:
+            return jsonify({'status':'failed','message':'rating and review required'})
+        if int(rating) and int(rating)>5:
+            return jsonify({'status':'failed','message':'rating must be 1 to 5'}),400
+        #reconnect mysql automatically
+        mydb.ping(reconnect=True)
+        cursor=mydb.cursor(buffered=True)
+        userid=session.get('userid')
+        cursor.execute('select count(*) from items where itemid=uuid_to_bin(%s)',[itemid])
+        item_exists=cursor.fetchone()[0]
+        if item_exists==0:
+            return jsonify({'status':'failed','message':'item not found'}),400
+
+        #--------------------insert review
+        cursor.execute('''insert into reviews(r_id,r_text,rating,itemid,userid) values (uuid_to_bin(uuid()),%s,%s,uuid_to_bin(%s),uuid_to_bin(%s))''',[review_text,rating,itemid,userid])
+        mydb.commit()
+        return jsonify({'status':'success','message':'Review added successfully'}),201
+    except Exception as e:
+        mydb.rollback()
+        print(f'Review Error,{e}')
+        return jsonify({'status':'failed','message':str(e)}),500
+    finally:
+        if cursor:
+            cursor.close()            
+@app.route('/api/forgotpassword', methods=['POST'])
+def forgotpassword():
+
+    data = request.get_json()
+    f_email = data.get('email')
+
+    cursor = mydb.cursor(buffered=True)
+
+    cursor.execute(
+        'select count(*) from userdata where useremail=%s',
+        [f_email]
+    )
+
+    count_email = cursor.fetchone()
+
+    if count_email[0] == 1:
+
+        reset_link = f"http://127.0.0.1:5000/api/resetpassword/{endata(f_email)}"
+
+        subject = "Reset Password Link"
+        body = f"Click the link to reset password:\n{reset_link}"
+
+        send_mail(
+            to=f_email,
+            subject=subject,
+            body=body
+        )
+
+        return {
+            "status": "success",
+            "message": "Reset link sent successfully"
+        }, 200
+
+    return {
+        "status": "error",
+        "message": "Email not found"
+    }, 404
     
+@app.route('/api/resetpassword/<token>', methods=['POST'])
+def resetpassword(token):
 
+    data = request.get_json()
+
+    npassword = data.get('password')
+    cpassword = data.get('confirm_password')
+
+    if npassword != cpassword:
+        return {
+            "status": "error",
+            "message": "Passwords do not match"
+        }, 400
+
+    try:
+
+        email = dndata(token)
+        hashed_pwd =  bcrypt.generate_password_hash(npassword)
+        cursor = mydb.cursor(buffered=True)
+
+        cursor.execute(
+            'update userdata set userpassword=%s where useremail=%s',
+            [hashed_pwd, email]
+        )
+
+        mydb.commit()
+
+        return {
+            "status": "success",
+            "message": "Password updated successfully"
+        }, 200
+
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Invalid or expired token,{str(e)}"
+        }, 400
+    finally:
+        if cursor:
+            cursor.close()
+
+@app.route('/api/category/<ctype>', methods=['GET'])
+def category(ctype):
+    cursor = None
+    try:
+
+        mydb.ping(reconnect=True)
+        cursor = mydb.cursor(buffered=True)
+
+        cursor.execute('''SELECT bin_to_uuid(itemid),item_name,item_description,item_about,price,quantity,category,
+                item_filename,created_at FROM items where category=%s''', [ctype])
+
+        allitems_data = cursor.fetchall()
+
+        if not allitems_data:
+            return jsonify({'status': 'failed','message': 'no items found'}), 404
+
+        products= []
+        for item in allitems_data:
+            products.append({
+            'itemid': item[0],
+            'itemname': item[1],
+            'item_desc': item[2],
+            'item_about': item[3],
+            'price': float(item[4]),
+            'quantity': item[5],
+            'category': item[6],
+            'image': url_for('static',filename=f'uploads/{item[7]}',_external=True)})
+
+        return jsonify({'status': 'success','category': ctype,'total_items':len(products),'products':products}), 200
+
+    except Exception as e:
+        print("category ERROR :", str(e))
+        return jsonify({'status': 'failed','message': str(e)}), 500
+
+    finally:
+        if cursor:
+            cursor.close()            
+            
+                       
         
 if __name__=='__main__':
     app.run()
