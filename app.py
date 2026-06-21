@@ -1675,8 +1675,11 @@ def addreview(itemid):
         review_text=data.get('review_text')
         if not rating or not review_text:
             return jsonify({'status':'failed','message':'rating and review required'})
-        if int(rating) and int(rating)>5:
-            return jsonify({'status':'failed','message':'rating must be 1 to 5'}),400
+        if int(rating) < 1 or int(rating) > 5:
+            return jsonify({
+                'status':'failed',
+                'message':'rating must be between 1 and 5'
+            }),400
         #reconnect mysql automatically
         mydb.ping(reconnect=True)
         cursor=mydb.cursor(buffered=True)
@@ -1696,7 +1699,47 @@ def addreview(itemid):
         return jsonify({'status':'failed','message':str(e)}),500
     finally:
         if cursor:
-            cursor.close()            
+            cursor.close()           
+
+@app.route('/api/reviews/<itemid>', methods=['GET'])
+def get_reviews(itemid):
+
+    cursor = None
+
+    try:
+
+        mydb.ping(reconnect=True)
+        cursor = mydb.cursor(dictionary=True)
+
+        cursor.execute("""
+            SELECT
+                rating,
+                r_text
+            FROM reviews
+            WHERE itemid = uuid_to_bin(%s)
+            ORDER BY r_id DESC
+        """, [itemid])
+
+        reviews = cursor.fetchall()
+
+        return jsonify({
+            'status': 'success',
+            'reviews': reviews
+        }), 200
+
+    except Exception as e:
+
+        print("REVIEW ERROR:", e)
+
+        return jsonify({
+            'status': 'failed',
+            'message': str(e)
+        }), 500
+
+    finally:
+        if cursor:
+            cursor.close()
+            
 @app.route('/api/forgotpassword', methods=['POST'])
 def forgotpassword():
 
