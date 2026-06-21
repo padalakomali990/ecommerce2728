@@ -1758,45 +1758,94 @@ def get_reviews(itemid):
     finally:
         if cursor:
             cursor.close()
-            
+
+from utils.stoken import endata
+
+
 @app.route('/api/forgotpassword', methods=['POST'])
 def forgotpassword():
 
-    data = request.get_json()
-    f_email = data.get('email')
+    cursor = None
 
-    cursor = mydb.cursor(buffered=True)
+    try:
 
-    cursor.execute(
-        'select count(*) from userdata where useremail=%s',
-        [f_email]
-    )
+        data = request.get_json()
 
-    count_email = cursor.fetchone()
+        if not data:
+            return jsonify({
+                "status": "failed",
+                "message": "No input data"
+            }), 400
 
-    if count_email[0] == 1:
+        f_email = data.get("email")
 
-        reset_link = f"http://127.0.0.1:5000/api/resetpassword/{endata(f_email)}"
+        if not f_email:
+            return jsonify({
+                "status": "failed",
+                "message": "Email required"
+            }), 400
 
-        subject = "Reset Password Link"
-        body = f"Click the link to reset password:\n{reset_link}"
+        mydb.ping(reconnect=True)
 
-        send_mail(
-            to=f_email,
-            subject=subject,
-            body=body
+        cursor = mydb.cursor(buffered=True)
+
+        cursor.execute(
+            '''
+            SELECT count(*)
+            FROM userdata
+            WHERE useremail=%s
+            ''',
+            [f_email]
         )
 
-        return {
-            "status": "success",
-            "message": "Reset link sent successfully"
-        }, 200
+        count_email = cursor.fetchone()
 
-    return {
-        "status": "error",
-        "message": "Email not found"
-    }, 404
-    
+        if count_email[0] == 1:
+
+            token = endata(f_email)
+
+            # frontend route
+            reset_link = (
+                f"http://localhost:5173/"
+                f"reset-password/{token}"
+            )
+
+            subject = "Reset Password Link"
+
+            body = (
+                f"Click below link to reset password:\n\n"
+                f"{reset_link}"
+            )
+
+            send_mail(
+                to=f_email,
+                subject=subject,
+                body=body
+            )
+
+            return jsonify({
+                "status": "success",
+                "message": "Reset link sent successfully"
+            }), 200
+
+        return jsonify({
+            "status": "failed",
+            "message": "Email not found"
+        }), 404
+
+    except Exception as e:
+
+        print("FORGOT PASSWORD ERROR =", str(e))
+
+        return jsonify({
+            "status": "failed",
+            "message": str(e)
+        }), 500
+
+    finally:
+        if cursor:
+            cursor.close()            
+           
 @app.route('/api/resetpassword/<token>', methods=['POST'])
 def resetpassword(token):
 
@@ -1813,8 +1862,11 @@ def resetpassword(token):
 
     try:
 
-        email = dndata(token)
-        hashed_pwd =  bcrypt.generate_password_hash(npassword)
+        decoded = dndata(token)
+        email = decoded["email"]
+        hashed_pwd = bcrypt.generate_password_hash(
+            npassword
+        ).decode("utf-8")
         cursor = mydb.cursor(buffered=True)
 
         cursor.execute(
