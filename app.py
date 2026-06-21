@@ -1889,6 +1889,136 @@ def resetpassword(token):
     finally:
         if cursor:
             cursor.close()
+            
+@app.route('/api/admin/forgotpassword', methods=['POST'])
+def adminforgotpassword():
+
+    cursor = None
+
+    try:
+
+        data = request.get_json()
+
+        if not data:
+            return jsonify({
+                "status": "failed",
+                "message": "No input data"
+            }), 400
+
+        a_email = data.get("email")
+
+        if not a_email:
+            return jsonify({
+                "status": "failed",
+                "message": "Email required"
+            }), 400
+
+        mydb.ping(reconnect=True)
+        cursor = mydb.cursor(buffered=True)
+
+        cursor.execute(
+            '''
+            SELECT count(*)
+            FROM admindata
+            WHERE admin_useremail=%s
+            ''',
+            [a_email]
+        )   
+
+        count_email = cursor.fetchone()
+
+        if count_email[0] == 1:
+
+            token = endata({
+                "admin_email": a_email
+            })
+
+            reset_link = (
+                f"http://localhost:5173/"
+                f"admin-reset-password/{token}"
+            )
+
+            send_mail(
+                to=a_email,
+                subject="Admin Reset Password",
+                body=f"Click below link:\n{reset_link}"
+            )
+
+            return jsonify({
+                "status": "success",
+                "message": "Reset link sent successfully"
+            }), 200
+
+        return jsonify({
+            "status": "failed",
+            "message": "Email not found"
+        }), 404
+
+    except Exception as e:
+
+        return jsonify({
+            "status": "failed",
+            "message": str(e)
+        }), 500
+
+    finally:
+        if cursor:
+            cursor.close()
+
+@app.route('/api/admin/resetpassword/<token>', methods=['POST'])
+def adminresetpassword(token):
+
+    cursor = None
+
+    try:
+
+        data = request.get_json()
+
+        password = data.get("password")
+        confirm = data.get("confirm_password")
+
+        if password != confirm:
+            return jsonify({
+                "status": "failed",
+                "message": "Passwords do not match"
+            }), 400
+
+        decoded = dndata(token)
+
+        email = decoded["admin_email"]
+
+        hashed_pwd = bcrypt.generate_password_hash(
+            password
+        ).decode("utf-8")
+
+        cursor = mydb.cursor(buffered=True)
+
+        cursor.execute(
+            '''
+            UPDATE admindata
+            SET admin_password=%s
+            WHERE admin_useremail=%s
+            ''',
+            [hashed_pwd, email]
+        )
+
+        mydb.commit()
+
+        return jsonify({
+            "status": "success",
+            "message": "Password updated successfully"
+        }), 200
+
+    except Exception as e:
+
+        return jsonify({
+            "status": "failed",
+            "message": str(e)
+        }), 400
+
+    finally:
+        if cursor:
+            cursor.close()
 
 @app.route('/api/category/<ctype>', methods=['GET'])
 def category(ctype):
