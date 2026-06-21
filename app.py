@@ -1700,7 +1700,7 @@ def addreview(itemid):
     finally:
         if cursor:
             cursor.close()           
-
+  
 @app.route('/api/reviews/<itemid>', methods=['GET'])
 def get_reviews(itemid):
 
@@ -1708,16 +1708,35 @@ def get_reviews(itemid):
 
     try:
 
+        # validate uuid
+        try:
+            uuid.UUID(itemid)
+        except ValueError:
+            return jsonify({
+                'status': 'failed',
+                'message': 'invalid item id'
+            }), 400
+
         mydb.ping(reconnect=True)
+
         cursor = mydb.cursor(dictionary=True)
 
         cursor.execute("""
+
             SELECT
-                rating,
-                r_text
-            FROM reviews
-            WHERE itemid = uuid_to_bin(%s)
+                r.rating,
+                r.r_text,
+                u.username
+
+            FROM reviews r
+
+            INNER JOIN userdata u
+                ON r.userid = u.userid
+
+            WHERE r.itemid = uuid_to_bin(%s)
+
             ORDER BY r_id DESC
+
         """, [itemid])
 
         reviews = cursor.fetchall()
@@ -1729,7 +1748,7 @@ def get_reviews(itemid):
 
     except Exception as e:
 
-        print("REVIEW ERROR:", e)
+        print("REVIEW FETCH ERROR =", str(e))
 
         return jsonify({
             'status': 'failed',
