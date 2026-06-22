@@ -3,6 +3,7 @@ import uuid
 sys.dont_write_bytecode = True
 from flask import Flask, make_response,request,redirect,url_for,jsonify,session
 from flask_cors import CORS
+from werkzeug.middleware.proxy_fix import ProxyFix
 #from flask_session import Session #security layer
 from flask_bcrypt import Bcrypt
 import re
@@ -30,14 +31,17 @@ client = razorpay.Client(auth=("rzp_test_SzppdEzy51SPYd", "ZXV3p1lSRtZFXpt9wXac4
 from werkzeug.utils import secure_filename #used to check secured filenames or not
 import os
 
-mydb=connection.MySQLConnection(user='root',host='localhost',password='Komali@123',db='ecommercedb')
+mydb=connection.MySQLConnection(user='root',host='flaskuser',password='password',db='ecommercedb')
 
 app = Flask(__name__)
-
+app.wsgi_app=ProxyFix(app.wsgi_app,x_proto=1,x_host=1)
 UPLOAD_FOLDER = "static/uploads"
 
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
+ALLOWED_EXTENSIONS={"png","jpeg","jpg","gif","webp","jfif"}
+MAX_CONTENT_LENGTH=6 *1024*1024 #6MB
+app.config['UPLOAD_FOLDER']=UPLOAD_FOLDER
 
 app.secret_key = "Code123"
 
@@ -46,7 +50,7 @@ app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = None
 
 app.permanent_session_lifetime = timedelta(days=1)
-
+app.config['PREFERED_URL_SCHEME']='https'
 CORS(
     app,
     supports_credentials=True,
