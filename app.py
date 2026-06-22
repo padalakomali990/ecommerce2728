@@ -53,9 +53,8 @@ app.permanent_session_lifetime = timedelta(days=1)
 app.config['PREFERED_URL_SCHEME']='https'
 CORS(
     app,
-    supports_credentials=True,
-    origins=["http://localhost:5173"]
-)
+    supports_credentials=True)
+
 
 bcrypt=Bcrypt(app)
 @app.route('/api/admin/register',methods=['POST'])
