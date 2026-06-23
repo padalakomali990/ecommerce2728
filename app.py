@@ -57,6 +57,10 @@ CORS(
 
 
 bcrypt=Bcrypt(app)
+
+@app.route("/")
+def home():
+    return "Flask Backend Running Successfully"
 @app.route('/api/admin/register',methods=['POST'])
 def admincreate():
     try:
