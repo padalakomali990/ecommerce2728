@@ -29,12 +29,19 @@ import razorpay
 client = razorpay.Client(auth=("rzp_test_SzppdEzy51SPYd", "ZXV3p1lSRtZFXpt9wXac4kI8"))
 
 from werkzeug.utils import secure_filename #used to check secured filenames or not
+from werkzeug.middleware.proxy_fix import ProxyFix
 import os
 
 mydb=connection.MySQLConnection(user='flaskuser',host='localhost',password='password',db='ecommercedb')
 
 app = Flask(__name__)
 app.wsgi_app=ProxyFix(app.wsgi_app,x_proto=1,x_host=1)
+app.wsgi_app = ProxyFix(
+    app.wsgi_app,
+    x_for=1,
+    x_proto=1,
+    x_host=1
+)
 UPLOAD_FOLDER = "static/uploads"
 
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
@@ -45,15 +52,18 @@ app.config['UPLOAD_FOLDER']=UPLOAD_FOLDER
 
 app.secret_key = "Code123"
 
-app.config["SESSION_COOKIE_SECURE"] = True
+app.config["SESSION_COOKIE_SECURE"] = False
 app.config["SESSION_COOKIE_HTTPONLY"] = True
-app.config["SESSION_COOKIE_SAMESITE"] = "None"
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["SESSION_REFRESH_EACH_REQUEST"] = True
 
 app.permanent_session_lifetime = timedelta(days=1)
 app.config['PREFERED_URL_SCHEME']='https'
 CORS(
     app,
-    supports_credentials=True)
+    origins=["http://localhost:5173","https://ecommerce-admin-user-five.vercel.app/"],   # your frontend
+    supports_credentials=True
+)
 
 
 bcrypt=Bcrypt(app)
@@ -803,8 +813,22 @@ def userlogin():
         session['userid'] = userid
         session['useremail'] = useremail
 
-        print("USER LOGIN SESSION =", session)
-        return jsonify({'status':'success','message':'Login successful','user':{'userid':userid,'username':username,'useremail':useremail}}),200
+        print("USER LOGIN SESSION =", dict(session))
+        print("USER LOGIN COOKIES =", request.cookies)
+
+        response = jsonify({
+            'status': 'success',
+            'message': 'Login successful',
+            'user': {
+                'userid': userid,
+                'username': username,
+                'useremail': useremail
+            }
+        })
+
+        print("RESPONSE HEADERS =", response.headers)
+
+        return response, 200
     except Exception as e:
         print('Mysql Error:',str(e))
         return jsonify({'status':'failed','message':str(e)}),500
@@ -839,8 +863,14 @@ def addcart():
     try:
         #login check
         print(session)
+        print("CART SESSION =", dict(session))
+        print("REQUEST COOKIES =", request.cookies)
+
         if 'userid' not in session:
-            return jsonify({'status':'failed','message':'pls login first'}),401
+            return jsonify({
+                'status': 'failed',
+                'message': 'pls login first'
+            }), 401
         data=request.get_json()
         if not data:
             return jsonify({'status':'failed','message':'No input data'}),400
