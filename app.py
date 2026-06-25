@@ -857,7 +857,7 @@ def userlogout():
             'message': str(e)
         }), 500 
                    
-@app.route('/api/cart/add',methods=['POST'])
+@app.route('/api/cart/add', methods=['POST'])
 def addcart():
     cursor=None
     try:
