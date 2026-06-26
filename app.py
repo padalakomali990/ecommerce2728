@@ -2176,7 +2176,14 @@ def category(ctype):
         if cursor:
             cursor.close()            
             
-                       
+@app.route("/check-cookie")
+def check_cookie():
+    print("CHECK COOKIE =", request.cookies)
+    print("CHECK SESSION =", dict(session))
+    return jsonify({
+        "cookies": dict(request.cookies),
+        "session": dict(session)
+    })                       
         
 if __name__=='__main__':
     app.run()
