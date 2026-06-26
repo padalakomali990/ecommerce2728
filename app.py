@@ -32,7 +32,7 @@ from werkzeug.utils import secure_filename #used to check secured filenames or n
 from werkzeug.middleware.proxy_fix import ProxyFix
 import os
 
-mydb=connection.MySQLConnection(user='flaskuser',host='localhost',password='password',db='ecommercedb')
+mydb=connection.MySQLConnection(user='root',host='localhost',password='Komali@123',db='ecommercedb')
 
 app = Flask(__name__)
 app.wsgi_app=ProxyFix(app.wsgi_app,x_proto=1,x_host=1)
@@ -52,17 +52,17 @@ app.config['UPLOAD_FOLDER']=UPLOAD_FOLDER
 
 app.secret_key = "Code123"
 
-app.config["SESSION_COOKIE_SECURE"] = True
+app.config["SESSION_COOKIE_SECURE"] = False
 app.config["SESSION_COOKIE_HTTPONLY"] = True
-app.config["SESSION_COOKIE_SAMESITE"] = "None"
-app.config["SESSION_REFRESH_EACH_REQUEST"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+# app.config["SESSION_REFRESH_EACH_REQUEST"] = True
 
 app.permanent_session_lifetime = timedelta(days=1)
 app.config['PREFERED_URL_SCHEME']='https'
 CORS(
     app,
     origins=[
-        "https://ecommerce-admin-user-five.vercel.app"
+        "https://ecommerce-admin-user-five.vercel.app","http://localhost:5173"
     ],
     supports_credentials=True
 )
@@ -847,23 +847,36 @@ def userlogin():
         if cursor:
             cursor.close()
             
-@app.route('/api/user/logout')
+@app.route('/api/user/logout', methods=['POST'])
 def logout():
-    ...
+    try:
+        # check user logged in or not
+        if 'userid' not in session:
+            return jsonify({
+                'status': 'failed',
+                'message': 'pls login first'
+            }), 401
 
-# ADD HERE
-@app.route("/check-cookie")
-def check_cookie():
-    print("CHECK COOKIE =", request.cookies)
-    print("CHECK SESSION =", dict(session))
-    return jsonify({
-        "cookies": dict(request.cookies),
-        "session": dict(session)
-    })
+        # debug (optional)
+        print("BEFORE LOGOUT SESSION =", dict(session))
 
-if __name__ == "__main__":
-    app.run(debug=True)            
-            
+        # clear complete session
+        session.clear()
+
+        # debug (optional)
+        print("AFTER LOGOUT SESSION =", dict(session))
+
+        return jsonify({
+            'status': 'success',
+            'message': 'Logout successful'
+        }), 200
+
+    except Exception as e:
+        print("LOGOUT ERROR =", str(e))
+        return jsonify({
+            'status': 'failed',
+            'message': str(e)
+        }), 500
 
 @app.route('/api/cart/add', methods=['POST'])
 def addcart():
@@ -2200,5 +2213,5 @@ def check_cookie():
         "session": dict(session)
     })                       
         
-if __name__=='__main__':
-    app.run()
+if __name__ == "__main__":
+    app.run(host="localhost", port=5000, debug=True)
