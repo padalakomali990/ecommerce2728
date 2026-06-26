@@ -835,28 +835,26 @@ def userlogin():
     finally:
         if cursor:
             cursor.close()
-@app.route('/api/user/logout', methods=['POST'])
-def userlogout():
-    try:
-        # remove user session values
-        session.pop('userid', None)
-        session.pop('useremail', None)
+            
+@app.route('/api/user/logout')
+def logout():
+    ...
 
-        # optional: clear all session
-        # session.clear()
+# ADD HERE
+@app.route("/check-cookie")
+def check_cookie():
+    print("CHECK COOKIE =", request.cookies)
+    print("CHECK SESSION =", dict(session))
+    return jsonify({
+        "cookies": dict(request.cookies),
+        "session": dict(session)
+    })
 
-        return jsonify({
-            'status': 'success',
-            'message': 'User logout successful'
-        }), 200
+if __name__ == "__main__":
+    app.run(debug=True)            
+            
 
-    except Exception as e:
-        print("Logout Error:", str(e))
-        return jsonify({
-            'status': 'failed',
-            'message': str(e)
-        }), 500 
-  @app.route('/api/cart/add', methods=['POST'])
+@app.route('/api/cart/add', methods=['POST'])
 def addcart():
     cursor = None
     try:
