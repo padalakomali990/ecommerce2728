@@ -54,16 +54,16 @@ app.secret_key = "Code123"
 
 app.config["SESSION_COOKIE_SECURE"] = False
 app.config["SESSION_COOKIE_HTTPONLY"] = True
-app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
-# app.config["SESSION_REFRESH_EACH_REQUEST"] = True
+# app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["SESSION_COOKIE_SAMESITE"] = "None"
 
 app.permanent_session_lifetime = timedelta(days=1)
 app.config['PREFERED_URL_SCHEME']='https'
 CORS(
     app,
-    origins=[
-        "https://ecommerce-admin-user-five.vercel.app","http://localhost:5173"
-    ],
+    # origins=[
+    #     "https://ecommerce-admin-user-five.vercel.app","http://localhost:5173"
+    # ],
     supports_credentials=True
 )
 
@@ -2214,4 +2214,5 @@ def check_cookie():
     })                       
         
 if __name__ == "__main__":
-    app.run(host="localhost", port=5000, debug=True)
+    # app.run(host="localhost", port=5000, debug=True)
+    app.run()
