@@ -829,7 +829,8 @@ def userlogin():
             }
         })
 
-        print("RESPONSE HEADERS =", response.headers)
+        print("FINAL SESSION =", dict(session))
+        print("FINAL RESPONSE HEADERS =", response.headers)
 
         return response, 200
     except Exception as e:
