@@ -32,7 +32,7 @@ from werkzeug.utils import secure_filename #used to check secured filenames or n
 from werkzeug.middleware.proxy_fix import ProxyFix
 import os
 
-mydb=connection.MySQLConnection(user='root',host='localhost',password='Komali@123',db='ecommercedb')
+mydb=connection.MySQLConnection(user='flaskuser',host='localhost',password='password',db='ecommercedb')
 
 app = Flask(__name__)
 app.wsgi_app=ProxyFix(app.wsgi_app,x_proto=1,x_host=1)
