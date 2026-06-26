@@ -868,8 +868,10 @@ if __name__ == "__main__":
 
 @app.route('/api/cart/add', methods=['POST'])
 def addcart():
-    cursor = None
 
+    print("******** ADD CART API CALLED ********")
+
+    cursor = None
     try:
         print("========== ADD CART ROUTE HIT ==========")
 
