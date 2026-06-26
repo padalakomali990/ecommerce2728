@@ -62,7 +62,6 @@ app.config['PREFERED_URL_SCHEME']='https'
 CORS(
     app,
     origins=[
-        "http://localhost:5173",
         "https://ecommerce-admin-user-five.vercel.app"
     ],
     supports_credentials=True
