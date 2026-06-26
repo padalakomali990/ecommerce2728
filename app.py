@@ -830,12 +830,15 @@ def userlogin():
             }
         })
 
+        # TEMP TEST COOKIE
         response.set_cookie(
-    "testcookie",
-    "hello123",
-    secure=False,
-    httponly=False
-)
+            "mytest",
+            "12345",
+            secure=False,
+            httponly=False
+        )
+
+        print("RESPONSE HEADERS =", response.headers)
 
         return response, 200
     except Exception as e:
