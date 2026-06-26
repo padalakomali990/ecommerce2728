@@ -52,7 +52,7 @@ app.config['UPLOAD_FOLDER']=UPLOAD_FOLDER
 
 app.secret_key = "Code123"
 
-app.config["SESSION_COOKIE_SECURE"] = False
+app.config["SESSION_COOKIE_SECURE"] = True
 # app.config["SESSION_COOKIE_SECURE"] = False
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 # app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
@@ -831,12 +831,12 @@ def userlogin():
         })
 
         # TEMP TEST COOKIE
-        response.set_cookie(
-            "mytest",
-            "12345",
-            secure=False,
-            httponly=False
-        )
+        # response.set_cookie(
+        #     "mytest",
+        #     "12345",
+        #     secure=False,
+        #     httponly=False
+        # )
 
         print("RESPONSE HEADERS =", response.headers)
 
