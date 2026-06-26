@@ -869,55 +869,56 @@ if __name__ == "__main__":
 @app.route('/api/cart/add', methods=['POST'])
 def addcart():
     cursor = None
-    try:
-        # DEBUG
-        print("===== CART DEBUG =====")
-        print("COOKIES:", request.cookies)
-        print("SESSION:", dict(session))
-        print("HEADERS:", dict(request.headers))
-        print("======================")
 
-        # LOGIN CHECK
+    try:
+        print("========== ADD CART ROUTE HIT ==========")
+
+        # Debug incoming request
+        print("REQUEST COOKIES =", request.cookies)
+        print("SESSION DATA =", dict(session))
+        print("REQUEST HEADERS =", dict(request.headers))
+
+        # Check login session
         if "userid" not in session:
+            print("USERID NOT FOUND IN SESSION")
+
             return jsonify({
                 "status": "failed",
                 "message": "pls login first"
             }), 401
 
-        # GET DATA
+        print("USERID FOUND =", session.get("userid"))
+
+        # Get request data
         data = request.get_json()
 
         if not data:
             return jsonify({
-                'status': 'failed',
-                'message': 'No input data'
+                "status": "failed",
+                "message": "No input data"
             }), 400
 
         itemid = data.get("itemid")
         quantity = int(data.get("quantity", 1))
 
-        print("ITEM ID =", itemid)
+        print("ITEMID =", itemid)
         print("QUANTITY =", quantity)
 
         if not itemid:
             return jsonify({
-                'status': 'failed',
-                'message': 'Itemid required'
+                "status": "failed",
+                "message": "Itemid required"
             }), 400
 
-        # DB CONNECTION
+        # DB reconnect
         mydb.ping(reconnect=True)
         cursor = mydb.cursor(buffered=True)
 
         userid = session.get("userid")
 
-        # CHECK ITEM EXISTS
+        # Check item exists
         cursor.execute(
-            '''
-            SELECT quantity 
-            FROM items 
-            WHERE itemid = uuid_to_bin(%s)
-            ''',
+            "SELECT quantity FROM items WHERE itemid=uuid_to_bin(%s)",
             [itemid]
         )
 
@@ -925,59 +926,58 @@ def addcart():
 
         if not item_quantity:
             return jsonify({
-                'status': 'failed',
-                'message': 'Item not found'
+                "status": "failed",
+                "message": "Item not found"
             }), 404
 
         available_stock = item_quantity[0]
 
         if quantity > available_stock:
             return jsonify({
-                'status': 'failed',
-                'message': 'Insufficient stock'
+                "status": "failed",
+                "message": "Insufficient stock"
             }), 400
 
-        # CHECK IF ITEM ALREADY IN CART
+        # Check existing cart
         cursor.execute(
             '''
-            SELECT quantity 
-            FROM cart 
-            WHERE userid = uuid_to_bin(%s)
-            AND itemid = uuid_to_bin(%s)
+            SELECT quantity FROM cart
+            WHERE userid=uuid_to_bin(%s)
+            AND itemid=uuid_to_bin(%s)
             ''',
             [userid, itemid]
         )
 
         existing_cart = cursor.fetchone()
 
-        # UPDATE CART
+        # Update existing cart
         if existing_cart:
             new_quantity = existing_cart[0] + quantity
 
             if new_quantity > available_stock:
                 return jsonify({
-                    'status': 'failed',
-                    'message': 'Insufficient stock'
+                    "status": "failed",
+                    "message": "Insufficient stock"
                 }), 400
 
             cursor.execute(
                 '''
                 UPDATE cart
-                SET quantity = %s
-                WHERE itemid = uuid_to_bin(%s)
-                AND userid = uuid_to_bin(%s)
+                SET quantity=%s
+                WHERE itemid=uuid_to_bin(%s)
+                AND userid=uuid_to_bin(%s)
                 ''',
                 [new_quantity, itemid, userid]
             )
 
             message = "Cart quantity updated"
 
-        # INSERT NEW ITEM
+        # Insert new cart
         else:
             cursor.execute(
                 '''
-                INSERT INTO cart(cartid, itemid, userid, quantity)
-                VALUES(uuid_to_bin(uuid()), uuid_to_bin(%s), uuid_to_bin(%s), %s)
+                INSERT INTO cart(cartid,itemid,userid,quantity)
+                VALUES(uuid_to_bin(uuid()),uuid_to_bin(%s),uuid_to_bin(%s),%s)
                 ''',
                 [itemid, userid, quantity]
             )
@@ -987,23 +987,25 @@ def addcart():
         mydb.commit()
 
         return jsonify({
-            'status': 'success',
-            'message': message
+            "status": "success",
+            "message": message
         }), 200
 
     except Exception as e:
-        mydb.rollback()
         print("MYSQL ERROR =", str(e))
 
+        if mydb:
+            mydb.rollback()
+
         return jsonify({
-            'status': 'failed',
-            'message': str(e)
+            "status": "failed",
+            "message": str(e)
         }), 500
 
     finally:
         if cursor:
             cursor.close() 
-                  
+                         
 @app.route('/api/cart/view',methods=['GET'])
 def viewcart():
     cursor=None
