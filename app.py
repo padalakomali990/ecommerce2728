@@ -35,7 +35,7 @@ import os
 mydb=connection.MySQLConnection(user='flaskuser',host='localhost',password='password',db='ecommercedb')
 
 app = Flask(__name__)
-app.wsgi_app=ProxyFix(app.wsgi_app,x_proto=1,x_host=1)
+# app.wsgi_app=ProxyFix(app.wsgi_app,x_proto=1,x_host=1)
 app.wsgi_app = ProxyFix(
     app.wsgi_app,
     x_for=1,
