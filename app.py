@@ -52,16 +52,19 @@ app.config['UPLOAD_FOLDER']=UPLOAD_FOLDER
 
 app.secret_key = "Code123"
 
-app.config["SESSION_COOKIE_SECURE"] = False
+app.config["SESSION_COOKIE_SECURE"] = True
 app.config["SESSION_COOKIE_HTTPONLY"] = True
-app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["SESSION_COOKIE_SAMESITE"] = "None"
 app.config["SESSION_REFRESH_EACH_REQUEST"] = True
 
 app.permanent_session_lifetime = timedelta(days=1)
 app.config['PREFERED_URL_SCHEME']='https'
 CORS(
     app,
-    origins=["http://localhost:5173","https://ecommerce-admin-user-five.vercel.app/"],   # your frontend
+    origins=[
+        "http://localhost:5173",
+        "https://ecommerce-admin-user-five.vercel.app"
+    ],
     supports_credentials=True
 )
 
