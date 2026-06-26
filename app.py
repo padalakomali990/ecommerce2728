@@ -830,8 +830,12 @@ def userlogin():
             }
         })
 
-        print("FINAL SESSION =", dict(session))
-        print("FINAL RESPONSE HEADERS =", response.headers)
+        response.set_cookie(
+    "testcookie",
+    "hello123",
+    secure=False,
+    httponly=False
+)
 
         return response, 200
     except Exception as e:
