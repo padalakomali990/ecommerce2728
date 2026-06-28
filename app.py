@@ -1589,7 +1589,7 @@ def myorder_details(ordid):
 
         if cursor:
             cursor.close()
-@app.route('/api/invoice/<int:ord_id>',methods=['GET'])
+@app.route('/api/invoice/<ord_id>',methods=['GET'])
 def get_invoice(ord_id):
     cursor=None
     try:
@@ -1666,7 +1666,7 @@ def get_invoice(ord_id):
         pdf_buffer.seek(0)
         #--------------RESPONSE------------
         response=make_response(pdf_buffer.getvalue())
-        response.headers['Content-Type']='application.pdf'
+        response.headers['Content-Type']='application/pdf'
         response.headers['Content-Disposition']=(
             f'attachment; filename=invoice_{ord_id}.pdf'
         )
@@ -1674,7 +1674,7 @@ def get_invoice(ord_id):
     except Exception as e:
         print(f'Invoice Error:',e)
         return jsonify({'status':'failed','message':str(e)}),500
-    else:
+    finally:
         if cursor:
             cursor.close()
             
