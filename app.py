@@ -1,5 +1,7 @@
 import sys
 import uuid
+
+from utils import cmail
 sys.dont_write_bytecode = True
 from flask import Flask, make_response,request,redirect,url_for,jsonify,session
 from flask_cors import CORS
@@ -1915,7 +1917,6 @@ def forgotpassword():
     cursor = None
 
     try:
-
         data = request.get_json()
 
         if not data:
@@ -1933,7 +1934,6 @@ def forgotpassword():
             }), 400
 
         mydb.ping(reconnect=True)
-
         cursor = mydb.cursor(buffered=True)
 
         cursor.execute(
@@ -1947,38 +1947,40 @@ def forgotpassword():
 
         count_email = cursor.fetchone()
 
-        if count_email[0] == 1:
-
-            token = endata(f_email)
-
-            # frontend route
-            reset_link = (
-                f"http://localhost:5173/"
-                f"reset-password/{token}"
-            )
-
-            subject = "Reset Password Link"
-
-            body = (
-                f"Click below link to reset password:\n\n"
-                f"{reset_link}"
-            )
-
-            send_mail(
-                to=f_email,
-                subject=subject,
-                body=body
-            )
-
+        if count_email[0] != 1:
             return jsonify({
-                "status": "success",
-                "message": "Reset link sent successfully"
-            }), 200
+                "status": "failed",
+                "message": "Email not found"
+            }), 404
+
+        # IMPORTANT FIX
+        token = endata({
+            "email": f_email
+        })
+
+        # PRODUCTION URL
+        reset_link = (
+            f"https://ecommerce-admin-user-five.vercel.app/"
+            f"reset-password/{token}"
+        )
+
+        subject = "Reset Password"
+
+        body = (
+            f"Click below link to reset password:\n\n"
+            f"{reset_link}"
+        )
+
+        cmail(
+            f_email,
+            subject,
+            body
+        )
 
         return jsonify({
-            "status": "failed",
-            "message": "Email not found"
-        }), 404
+            "status": "success",
+            "message": "Reset link sent successfully"
+        }), 200
 
     except Exception as e:
 
@@ -1991,59 +1993,76 @@ def forgotpassword():
 
     finally:
         if cursor:
-            cursor.close()            
-           
+            cursor.close()     
 @app.route('/api/resetpassword/<token>', methods=['POST'])
 def resetpassword(token):
 
-    data = request.get_json()
-
-    npassword = data.get('password')
-    cpassword = data.get('confirm_password')
-
-    if npassword != cpassword:
-        return {
-            "status": "error",
-            "message": "Passwords do not match"
-        }, 400
+    cursor = None
 
     try:
+        data = request.get_json()
+
+        if not data:
+            return jsonify({
+                "status": "failed",
+                "message": "No input data"
+            }), 400
+
+        npassword = data.get("password")
+        cpassword = data.get("confirm_password")
+
+        if npassword != cpassword:
+            return jsonify({
+                "status": "failed",
+                "message": "Passwords do not match"
+            }), 400
 
         decoded = dndata(token)
+
         email = decoded["email"]
+
         hashed_pwd = bcrypt.generate_password_hash(
             npassword
         ).decode("utf-8")
+
+        mydb.ping(reconnect=True)
         cursor = mydb.cursor(buffered=True)
 
         cursor.execute(
-            'update userdata set userpassword=%s where useremail=%s',
+            '''
+            UPDATE userdata
+            SET userpassword=%s
+            WHERE useremail=%s
+            ''',
             [hashed_pwd, email]
         )
 
         mydb.commit()
 
-        return {
+        return jsonify({
             "status": "success",
             "message": "Password updated successfully"
-        }, 200
+        }), 200
 
     except Exception as e:
-        return {
-            "status": "error",
-            "message": f"Invalid or expired token,{str(e)}"
-        }, 400
+
+        print("RESET PASSWORD ERROR =", str(e))
+
+        return jsonify({
+            "status": "failed",
+            "message": f"Invalid token or expired token: {str(e)}"
+        }), 400
+
     finally:
         if cursor:
             cursor.close()
-            
+                   
 @app.route('/api/admin/forgotpassword', methods=['POST'])
 def adminforgotpassword():
 
     cursor = None
 
     try:
-
         data = request.get_json()
 
         if not data:
@@ -2070,38 +2089,46 @@ def adminforgotpassword():
             WHERE admin_useremail=%s
             ''',
             [a_email]
-        )   
+        )
 
         count_email = cursor.fetchone()
 
-        if count_email[0] == 1:
-
-            token = endata({
-                "admin_email": a_email
-            })
-
-            reset_link = (
-                f"http://localhost:5173/"
-                f"admin-reset-password/{token}"
-            )
-
-            send_mail(
-                to=a_email,
-                subject="Admin Reset Password",
-                body=f"Click below link:\n{reset_link}"
-            )
-
+        if count_email[0] != 1:
             return jsonify({
-                "status": "success",
-                "message": "Reset link sent successfully"
-            }), 200
+                "status": "failed",
+                "message": "Email not found"
+            }), 404
+
+        token = endata({
+            "admin_email": a_email
+        })
+
+        reset_link = (
+            f"https://ecommerce-admin-user-five.vercel.app/"
+            f"admin-reset-password/{token}"
+        )
+
+        subject = "Admin Reset Password"
+
+        body = (
+            f"Click below link to reset password:\n\n"
+            f"{reset_link}"
+        )
+
+        cmail(
+            a_email,
+            subject,
+            body
+        )
 
         return jsonify({
-            "status": "failed",
-            "message": "Email not found"
-        }), 404
+            "status": "success",
+            "message": "Reset link sent successfully"
+        }), 200
 
     except Exception as e:
+
+        print("ADMIN FORGOT PASSWORD ERROR =", str(e))
 
         return jsonify({
             "status": "failed",
@@ -2111,15 +2138,20 @@ def adminforgotpassword():
     finally:
         if cursor:
             cursor.close()
-
+            
 @app.route('/api/admin/resetpassword/<token>', methods=['POST'])
 def adminresetpassword(token):
 
     cursor = None
 
     try:
-
         data = request.get_json()
+
+        if not data:
+            return jsonify({
+                "status": "failed",
+                "message": "No input data"
+            }), 400
 
         password = data.get("password")
         confirm = data.get("confirm_password")
@@ -2138,6 +2170,7 @@ def adminresetpassword(token):
             password
         ).decode("utf-8")
 
+        mydb.ping(reconnect=True)
         cursor = mydb.cursor(buffered=True)
 
         cursor.execute(
@@ -2158,15 +2191,17 @@ def adminresetpassword(token):
 
     except Exception as e:
 
+        print("ADMIN RESET PASSWORD ERROR =", str(e))
+
         return jsonify({
             "status": "failed",
-            "message": str(e)
+            "message": f"Invalid token or expired token: {str(e)}"
         }), 400
 
     finally:
         if cursor:
             cursor.close()
-
+            
 @app.route('/api/category/<ctype>', methods=['GET'])
 def category(ctype):
     cursor = None
