@@ -1,7 +1,6 @@
 import sys
 import uuid
 
-from utils import cmail
 sys.dont_write_bytecode = True
 from flask import Flask, make_response,request,redirect,url_for,jsonify,session
 from flask_cors import CORS
@@ -1971,7 +1970,7 @@ def forgotpassword():
             f"{reset_link}"
         )
 
-        cmail(
+        send_mail(
             f_email,
             subject,
             body
@@ -1993,7 +1992,8 @@ def forgotpassword():
 
     finally:
         if cursor:
-            cursor.close()     
+            cursor.close()  
+               
 @app.route('/api/resetpassword/<token>', methods=['POST'])
 def resetpassword(token):
 
@@ -2115,7 +2115,7 @@ def adminforgotpassword():
             f"{reset_link}"
         )
 
-        cmail(
+        send_mail(
             a_email,
             subject,
             body
